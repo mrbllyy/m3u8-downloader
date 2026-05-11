@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (state.capturedPlaylists) renderPlaylists(state.capturedPlaylists);
             if (state.suspects) renderSuspects(state.suspects);
 
-            // Hook key sayacı
+            // Hook key counter
             var keyInfo = document.getElementById('key-info');
             if (keyInfo) {
                 var count = state.hookKeyCount || 0;
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     keyInfo.style.color = "#e94560";
                 }
 
-                // Hover'da key hex'lerini göster
+                // Show key hexes on hover
                 if (state.hookedKeyHexes && state.hookedKeyHexes.length > 0) {
                     var tip = "";
                     for (var i = 0; i < state.hookedKeyHexes.length; i++) {

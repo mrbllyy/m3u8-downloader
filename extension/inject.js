@@ -1,9 +1,9 @@
-// inject.js - Page context'inde çalışan crypto hook
-// Bu dosya doğrudan sayfanın JS context'ine yüklenir (extension URL üzerinden)
+// inject.js - Crypto hook running in Page context
+// This file is loaded directly into the page JS context (via extension URL)
 
 (function () {
-    if (window.__tipdemy_hooked__) return; // Çoklu hook'u engelle
-    window.__tipdemy_hooked__ = true;
+    if (window.__hls_decryptor_hooked__) return; // Prevent multiple hooks
+    window.__hls_decryptor_hooked__ = true;
 
     var _origImportKey = crypto.subtle.importKey.bind(crypto.subtle);
 
@@ -33,7 +33,7 @@
                         hex: hex
                     }, "*");
 
-                    console.log("%c🔑 AES Key Yakalandı: " + hex, "color: #00ff88; font-weight: bold;");
+                    console.log("%c🔑 AES Key Captured: " + hex, "color: #00ff88; font-weight: bold;");
                 }
             }
         } catch (e) {
@@ -43,5 +43,5 @@
         return _origImportKey(format, keyData, algorithm, extractable, usages);
     };
 
-    console.log("%c🎯 Universal Crypto Hook Aktif!", "color: #e94560; font-size: 14px; font-weight: bold;");
+    console.log("%c🎯 Universal Crypto Hook Active!", "color: #e94560; font-size: 14px; font-weight: bold;");
 })();

