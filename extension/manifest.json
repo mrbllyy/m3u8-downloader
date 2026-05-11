@@ -34,7 +34,10 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "downloader@m3u8.local"
+      "id": "downloader@m3u8.local",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
