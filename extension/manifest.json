@@ -1,0 +1,40 @@
+{
+  "manifest_version": 2,
+  "name": "Universal HLS Decryptor & Downloader",
+  "version": "1.0",
+  "description": "Instantly captures, decrypts, and downloads AES-128 encrypted HLS (M3U8) streams.",
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "storage",
+    "downloads",
+    "tabs",
+    "webNavigation",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "HLS Downloader"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "downloader@m3u8.local"
+    }
+  }
+}

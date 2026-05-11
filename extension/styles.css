@@ -1,0 +1,214 @@
+:root {
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --accent-color: #38bdf8;
+    --text-color: #f8fafc;
+    --text-dim: #94a3b8;
+    --gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+}
+
+body {
+    width: 350px;
+    margin: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.container {
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+h1 {
+    font-size: 24px;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.accent {
+    color: var(--accent-color);
+    font-weight: 800;
+}
+
+header p {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 4px 0 0;
+}
+
+.manual-input {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.manual-input input {
+    flex: 1;
+    background: var(--card-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    color: white;
+    font-size: 13px;
+    outline: none;
+}
+
+.manual-input input:focus {
+    border-color: var(--accent-color);
+}
+
+#add-manual-btn {
+    background: var(--accent-color);
+    border: none;
+    color: var(--bg-color);
+    padding: 0 15px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+#playlist-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.playlist-item {
+    background: var(--card-bg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.playlist-item:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent-color);
+    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.1);
+}
+
+.playlist-url {
+    font-size: 11px;
+    color: var(--text-dim);
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.playlist-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.video-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-color);
+}
+
+.playlist-url-small {
+    font-size: 10px;
+    color: var(--text-dim);
+    word-break: break-all;
+    opacity: 0.7;
+}
+
+.download-btn-pro {
+    background: var(--gradient);
+    border: none;
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    font-weight: 800;
+    cursor: pointer;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    transition: all 0.3s ease;
+    margin-top: 5px;
+}
+
+.download-btn-pro:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+}
+
+.download-btn-pro:active {
+    transform: scale(0.98);
+}
+
+.hidden { display: none; }
+
+.progress-container {
+    background: #334155;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 12px 0;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--gradient);
+    transition: width 0.3s ease;
+}
+
+#status-text {
+    font-size: 12px;
+    text-align: center;
+    color: var(--text-dim);
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 20px;
+    font-size: 13px;
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+.btn-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.harvest-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #f1c40f, #f39c12);
+    color: #000;
+    border: none;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.download-btn-pro {
+    flex: 1;
+    width: auto;
+}

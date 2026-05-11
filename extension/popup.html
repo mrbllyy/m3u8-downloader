@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>HLS Stream <span class="accent">Pro</span></h1>
+            <p>Advanced Decryptor & Downloader</p>
+        </header>
+
+        <div class="debug-actions">
+            <button id="scan-page-btn" class="scan-btn">SCAN PAGE</button>
+            <button id="seek-btn" class="secondary-btn">⏩ SEEK 5 MIN</button>
+            <button id="toggle-paste-btn" class="secondary-btn">PASTE M3U8</button>
+        </div>
+
+        <div id="key-info"
+            style="padding:6px 12px;margin:8px 0;background:#1a1a2e;border-radius:6px;color:#e94560;font-weight:bold;font-size:13px;text-align:center;">
+            🔑 Captured Keys: 0</div>
+
+        <div id="paste-section" class="hidden">
+            <textarea id="m3u8-content" placeholder="Paste #EXTM3U content here..."></textarea>
+            <button id="process-paste-btn" class="download-btn-pro">PROCESS & DOWNLOAD</button>
+        </div>
+
+        <div id="playlist-section">
+            <div class="section-title">Detected Videos</div>
+            <ul id="playlist-list">
+                <div class="empty-state">Click scan...</div>
+            </ul>
+        </div>
+
+        <div id="suspect-section">
+            <div class="section-title">Suspicious Config Files</div>
+            <ul id="suspect-list"></ul>
+        </div>
+
+        <div id="progress-section" class="hidden">
+            <div class="section-title" id="download-title">Task in Progress</div>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <div id="status-text">Starting...</div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
