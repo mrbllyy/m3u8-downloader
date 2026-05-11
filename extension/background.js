@@ -13,7 +13,26 @@ var pastedM3U8Text = null;
 try {
   browser.webRequest.onBeforeRequest.addListener(
     function (details) {
-      if (details.url.indexOf('/video/key/') === -1) return;
+      // Filter Key URLs (video/key, key/video, video-key, etc.)
+      const keyPatterns = [
+        'video/key',
+        'key/video',
+        'video-key',
+        'stream-key',
+        '/vod/key/',
+        'playkey',
+        'enckey',
+        'key_url'
+      ];
+
+      const url = details.url.toLowerCase();
+      const isKeyRequest = keyPatterns.some(pattern => url.includes(pattern));
+
+      if (!isKeyRequest) {
+        return;
+      }
+
+      console.log("🔑 Key request detected:", details.url);
 
       var filter = browser.webRequest.filterResponseData(details.requestId);
       var chunks = [];
@@ -72,7 +91,7 @@ try {
         try { filter.disconnect(); } catch (e) { }
       };
     },
-    { urls: ["*://*/video/key/*"] },
+    { urls: ["<all_urls>"] },
     ["blocking"]
   );
   console.log("🔫 Network Sniper active!");
