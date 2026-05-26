@@ -173,15 +173,22 @@ async function startHarvest(m3u8Url) {
     var lines = text.split('\n');
     var keyPoints = [];
     var time = 0;
+    var mediaSequence = 0;
+    var segmentIndex = 0;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
-      if (line.indexOf('#EXTINF:') === 0) {
+      if (line.indexOf('#EXT-X-MEDIA-SEQUENCE:') === 0) {
+        mediaSequence = parseInt(line.split(':')[1]) || 0;
+      } else if (line.indexOf('#EXTINF:') === 0) {
         time += parseFloat(line.split(':')[1].split(',')[0]) || 0;
       } else if (line.indexOf('#EXT-X-KEY') === 0) {
         keyPoints.push({ time: Math.floor(time) + 1, index: keyPoints.length });
+      } else if (line.length > 0 && line.indexOf('#') !== 0) {
+        segmentIndex++;
       }
     }
+    console.log("📋 Harvest: mediaSequence=" + mediaSequence + ", segments=" + segmentIndex + ", keyPoints=" + keyPoints.length);
 
     activeTask.text = keyPoints.length + " key points. Waiting for hook...";
 
@@ -239,6 +246,18 @@ async function startDownload(m3u8Url) {
     var playlist = [];
     var curKeyIndex = -1;
     var curIV = null;
+    var mediaSequence = 0;
+    var segmentIndex = 0;
+
+    // İlk geçişte #EXT-X-MEDIA-SEQUENCE oku
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.indexOf('#EXT-X-MEDIA-SEQUENCE:') === 0) {
+        mediaSequence = parseInt(line.split(':')[1]) || 0;
+        break;
+      }
+    }
+    console.log("📋 Download: mediaSequence=" + mediaSequence);
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
@@ -248,11 +267,14 @@ async function startDownload(m3u8Url) {
         curIV = info.iv;
         keyEntries.push({ uri: info.uri, iv: info.iv });
       } else if (line.length > 0 && line.indexOf('#') !== 0) {
+        // IV belirtilmemişse HLS spec gereği sequence number'dan üret
+        var effectiveIV = curIV || buildSequenceIV(mediaSequence + segmentIndex);
         playlist.push({
           url: line.indexOf('http') === 0 ? line : resolveUrl(line, m3u8Url),
           keyIndex: Math.max(0, curKeyIndex),
-          iv: curIV
+          iv: effectiveIV
         });
+        segmentIndex++;
       }
     }
 
@@ -281,7 +303,8 @@ async function startDownload(m3u8Url) {
       activeTask.text = "Key#" + ki + " test (" + hookedKeys.length + " candidates)...";
 
       var testSegBuf = await fetchDirect(playlist[testSegIdx].url);
-      var testIV = (keyEntries[ki] && keyEntries[ki].iv) || new Uint8Array(16);
+      // Test segment'in kendi IV'sini kullan (artık spec-uyumlu hesaplanıyor)
+      var testIV = playlist[testSegIdx].iv || new Uint8Array(16);
       var keyUri = keyEntries[ki] && keyEntries[ki].uri;
 
       var foundKey = null;
@@ -332,13 +355,15 @@ async function startDownload(m3u8Url) {
             }
           }
 
-          // TS sync byte kontrolü
-          var firstByte = new Uint8Array(decrypted)[0];
-          if (firstByte === 0x47) {
-            console.log("✅ Key#" + ki + " → " + candidate.hex.substring(0, 8) + " (TS sync OK)");
+          // TS sync byte kontrolü (multi-sync validation)
+          if (validateTSSync(decrypted)) {
+            console.log("✅ Key#" + ki + " → " + candidate.hex.substring(0, 8) + " (TS multi-sync OK)");
             keyGroupMap[ki] = cryptoKey;
             foundKey = true;
             break;
+          } else {
+            var fb = new Uint8Array(decrypted)[0];
+            console.log("    First byte 0x" + fb.toString(16) + " – sync validation failed");
           }
         } catch (e) {
           console.log("    importKey/general error:", e.message || e.name);
@@ -370,7 +395,7 @@ async function startDownload(m3u8Url) {
 
       var segBuf = await fetchDirect(playlist[i].url);
       var keyObj = keyGroupMap[playlist[i].keyIndex];
-      var iv = playlist[i].iv || new Uint8Array(16);
+      var iv = playlist[i].iv;
 
       if (!keyObj) {
         console.warn("⚠️ Segment#" + i + " skipping (No valid key found!)");
@@ -383,6 +408,11 @@ async function startDownload(m3u8Url) {
         decBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv: iv }, keyObj, segBuf);
       } catch (padErr) {
         decBuf = await decryptNoPadding(keyObj, iv, segBuf);
+      }
+
+      // Post-decrypt TS validation
+      if (!validateTSSync(decBuf)) {
+        console.warn("⚠️ Segment#" + i + " TS validation FAILED – first byte: 0x" + new Uint8Array(decBuf)[0].toString(16));
       }
       segments.push(decBuf);
     }
@@ -437,6 +467,33 @@ async function decryptNoPadding(key, iv, ciphertext) {
   );
 
   return result;
+}
+
+// ============ TS VALİDASYON & IV HELPER ============
+
+// HLS spec: IV belirtilmemişse segment sequence number big-endian 128-bit integer olarak kullanılır
+function buildSequenceIV(sequenceNumber) {
+  var iv = new Uint8Array(16);
+  var n = sequenceNumber;
+  for (var i = 15; i >= 0 && n > 0; i--) {
+    iv[i] = n & 0xff;
+    n = Math.floor(n / 256);
+  }
+  return iv;
+}
+
+// TS paketleri 188 byte'tır, her paket 0x47 sync byte ile başlar
+// En az 2 sync noktası doğrulanmalı (false positive'i %99.8 azaltır)
+function validateTSSync(decrypted) {
+  var arr = new Uint8Array(decrypted);
+  if (arr.length < 188) return false;
+  if (arr[0] !== 0x47) return false;
+  var checkPoints = Math.min(Math.floor(arr.length / 188), 5);
+  if (checkPoints < 2) return arr[0] === 0x47; // Çok kısa segment
+  for (var i = 0; i < checkPoints; i++) {
+    if (arr[i * 188] !== 0x47) return false;
+  }
+  return true;
 }
 
 // ============ YARDIMCI ============
