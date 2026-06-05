@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Universal HLS Decryptor & Downloader",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Instantly captures, decrypts, and downloads AES-128 encrypted HLS (M3U8) streams.",
   "permissions": [
     "webRequest",
@@ -36,7 +36,9 @@
     "gecko": {
       "id": "downloader@m3u8.local",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   }

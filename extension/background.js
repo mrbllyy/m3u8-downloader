@@ -4,12 +4,12 @@
 
 var authHeaders = {};
 var capturedPlaylists = {};
-var hookedKeys = [];        // [{hex, data}] - tüm yakalanan key'ler (hook + sniper)
+var hookedKeys = [];        // [{hex, data}] - all captured keys (hook + sniper)
 var suspects = [];
 var activeTask = { status: "IDLE", progress: 0, text: "" };
 var pastedM3U8Text = null;
 
-// ============ NETWORK SNİPER: key byte'larını ağ trafiğinden yakala ============
+// ============ NETWORK SNIPER: capture key bytes from network traffic ============
 try {
   browser.webRequest.onBeforeRequest.addListener(
     function (details) {
@@ -39,13 +39,13 @@ try {
 
       filter.ondata = function (event) {
         chunks.push(new Uint8Array(event.data));
-        filter.write(event.data); // Veriyi olduğu gibi geçir
+        filter.write(event.data); // Pass data through as-is
       };
 
       filter.onstop = function () {
         filter.disconnect();
 
-        // Parçaları birleştir
+        // Combine chunks
         var totalLen = 0;
         for (var i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
         var combined = new Uint8Array(totalLen);
@@ -55,35 +55,35 @@ try {
           offset += chunks[i].length;
         }
 
-        // JSON hata yanıtlarını atla (0x7b = '{')
+        // Skip JSON error responses (0x7b = '{')
         if (combined[0] === 0x7b) {
           console.log("⚠️ Sniper: Skipped JSON response:", details.url.split('/').pop());
           return;
         }
 
-        // 16 byte olmalı (AES-128 key)
+        // Must be 16 bytes (AES-128 key)
         if (combined.length !== 16) {
           console.log("⚠️ Sniper: Unexpected size:", combined.length, "byte");
-          // Yine de sakla, belki brute-force bulur
+          // Keep it anyway, maybe brute-force will find it
         }
 
-        // Hex'e çevir
+        // Convert to hex
         var hex = "";
         for (var i = 0; i < combined.length; i++) {
           var h = combined[i].toString(16);
           hex += (h.length < 2 ? "0" : "") + h;
         }
 
-        // Duplikat kontrolü
+        // Duplicate check
         var isDupe = false;
         for (var i = 0; i < hookedKeys.length; i++) {
           if (hookedKeys[i].hex === hex) { isDupe = true; break; }
         }
 
         if (!isDupe) {
-          var keyBuf = combined.buffer.slice(0, 16); // İlk 16 byte
+          var keyBuf = combined.buffer.slice(0, 16); // First 16 bytes
           hookedKeys.push({ hex: hex.substring(0, 32), data: keyBuf, source: "sniper" });
-          console.log("🔫 SNİPER KEY #" + hookedKeys.length + ":", hex.substring(0, 32), "(" + details.url.split('/').pop() + ")");
+          console.log("🔫 SNIPER KEY #" + hookedKeys.length + ":", hex.substring(0, 32), "(" + details.url.split('/').pop() + ")");
         }
       };
 
@@ -99,7 +99,7 @@ try {
   console.warn("filterResponseData unavailable:", e.message);
 }
 
-// ============ MESAJ DİNLEYİCİ ============
+// ============ MESSAGE LISTENER ============
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   try {
     if (!msg) return false;
@@ -118,7 +118,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       return false;
     }
 
-    // Crypto Hook'tan gelen key
+    // Key from Crypto Hook
     if (msg.type === "CRYPTO_KEY_CAPTURED" && msg.hex) {
       var isDupe = false;
       for (var i = 0; i < hookedKeys.length; i++) {
@@ -160,7 +160,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   return false;
 });
 
-// ============ ANAHTAR TOPLAMA ============
+// ============ KEY HARVESTING ============
 async function startHarvest(m3u8Url) {
   activeTask = { status: "RUNNING", progress: 0, text: "Analyzing M3U8..." };
   try {
@@ -192,7 +192,7 @@ async function startHarvest(m3u8Url) {
 
     activeTask.text = keyPoints.length + " key points. Waiting for hook...";
 
-    // İlk olarak hook'un enjekte olduğundan emin ol
+    // First make sure the hook is injected
     await injectContentScript();
     await sleep(1000);
 
@@ -203,17 +203,17 @@ async function startHarvest(m3u8Url) {
       activeTask.text = "Seek: " + (i + 1) + "/" + keyPoints.length + " (sec:" + keyPoints[i].time + ") | Key: " + hookedKeys.length;
       activeTask.progress = Math.round(((i + 1) / keyPoints.length) * 100);
 
-      // Seek + kısa play (player'ın key fetch etmesi için)
+      // Seek + short play (for player to fetch key)
       await seekAndPlay(keyPoints[i].time);
 
-      // Key'in gelmesini bekle (max 8 saniye)
+      // Wait for the key to arrive (max 8 seconds)
       var waitStart = Date.now();
       while (hookedKeys.length <= prevCount && (Date.now() - waitStart) < 8000) {
         await sleep(500);
       }
 
       if (hookedKeys.length > prevCount) {
-        console.log("✅ Key#" + i + " yakalandı (sec:" + keyPoints[i].time + "): " + hookedKeys[hookedKeys.length - 1].hex);
+        console.log("✅ Key#" + i + " captured (sec:" + keyPoints[i].time + "): " + hookedKeys[hookedKeys.length - 1].hex);
       } else {
         console.log("⏳ Key#" + i + " (sec:" + keyPoints[i].time + ") not captured, continuing...");
       }
@@ -229,13 +229,13 @@ async function startHarvest(m3u8Url) {
   }
 }
 
-// ============ İNDİRME & DECRYPT ============
+// ============ DOWNLOAD & DECRYPT ============
 async function startDownload(m3u8Url) {
   activeTask = { status: "RUNNING", progress: 0, text: "Preparing..." };
   try {
     var text = await getM3U8Text(m3u8Url);
     if (!text || text.indexOf('#EXTM3U') === -1) {
-      activeTask = { status: "ERROR", text: "Failed to read M3U8! İlk 80 chr: " + (text || "EMPTY").substring(0, 80) };
+      activeTask = { status: "ERROR", text: "Failed to read M3U8! First 80 chars: " + (text || "EMPTY").substring(0, 80) };
       return;
     }
     text = text.replace(/\r/g, '');
@@ -249,7 +249,7 @@ async function startDownload(m3u8Url) {
     var mediaSequence = 0;
     var segmentIndex = 0;
 
-    // İlk geçişte #EXT-X-MEDIA-SEQUENCE oku
+    // Read #EXT-X-MEDIA-SEQUENCE in first pass
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (line.indexOf('#EXT-X-MEDIA-SEQUENCE:') === 0) {
@@ -267,7 +267,7 @@ async function startDownload(m3u8Url) {
         curIV = info.iv;
         keyEntries.push({ uri: info.uri, iv: info.iv });
       } else if (line.length > 0 && line.indexOf('#') !== 0) {
-        // IV belirtilmemişse HLS spec gereği sequence number'dan üret
+        // If IV is not specified, generate from sequence number per HLS spec
         var effectiveIV = curIV || buildSequenceIV(mediaSequence + segmentIndex);
         playlist.push({
           url: line.indexOf('http') === 0 ? line : resolveUrl(line, m3u8Url),
@@ -289,7 +289,7 @@ async function startDownload(m3u8Url) {
     activeTask.text = hookedKeys.length + " hook keys for brute-force match...";
     await sleep(1000);
 
-    // Her key grubu için brute-force eşleştirme (no-padding destekli)
+    // Brute-force match for each key group (no-padding supported)
     var numGroups = keyEntries.length > 0 ? keyEntries.length : 1;
     var keyGroupMap = {}; // keyIndex -> CryptoKey
 
@@ -303,20 +303,20 @@ async function startDownload(m3u8Url) {
       activeTask.text = "Key#" + ki + " test (" + hookedKeys.length + " candidates)...";
 
       var testSegBuf = await fetchDirect(playlist[testSegIdx].url);
-      // Test segment'in kendi IV'sini kullan (artık spec-uyumlu hesaplanıyor)
+      // Use test segment's own IV (now computed spec-compliantly)
       var testIV = playlist[testSegIdx].iv || new Uint8Array(16);
       var keyUri = keyEntries[ki] && keyEntries[ki].uri;
 
       var foundKey = null;
       console.log("🔍 Key#" + ki + " test: seg=" + testSegBuf.byteLength + "b, IV=" + (testIV instanceof Uint8Array ? Array.from(testIV.slice(0, 4)).map(function (b) { return b.toString(16) }).join('') : "null"));
 
-      // YENİ STRATEJİ: Direkt indirmeyi dene (Oturum varsa en garantisi)
+      // NEW STRATEGY: Try downloading directly (most guaranteed if session exists)
       if (keyUri) {
         try {
           console.log("📥 Key#" + ki + " fetching directly: " + keyUri);
           var rawBuf = await fetchDirect(keyUri);
           var rawArr = new Uint8Array(rawBuf);
-          // 16 byte ise ve JSON '{' (0x7b) ile başlamıyorsa geçerli bir key'dir
+          // If it is 16 bytes and does not start with JSON '{', it is a valid key
           if (rawArr.length === 16 && rawArr[0] !== 0x7b) {
             var fhex = Array.from(rawArr).map(function (b) { return b.toString(16).padStart(2, '0') }).join('');
             hookedKeys.push({ hex: fhex, data: rawBuf, source: "fetch" });
@@ -338,14 +338,14 @@ async function startDownload(m3u8Url) {
             "raw", candidate.data, { name: "AES-CBC" }, false, ["encrypt", "decrypt"]
           );
 
-          // Önce normal padding ile dene
+          // First try with normal padding
           var decrypted = null;
           try {
             decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv: testIV }, cryptoKey, testSegBuf);
             console.log("    Normal decrypt OK, first byte: 0x" + new Uint8Array(decrypted)[0].toString(16));
           } catch (padErr) {
             console.log("    Normal decrypt error (expected):", padErr.message || padErr.name);
-            // No-padding ile dene
+            // Try with no-padding
             try {
               decrypted = await decryptNoPadding(cryptoKey, testIV, testSegBuf);
               console.log("    NoPadding decrypt OK, first byte: 0x" + new Uint8Array(decrypted)[0].toString(16));
@@ -355,7 +355,7 @@ async function startDownload(m3u8Url) {
             }
           }
 
-          // TS sync byte kontrolü (multi-sync validation)
+          // TS sync byte control (multi-sync validation)
           if (validateTSSync(decrypted)) {
             console.log("✅ Key#" + ki + " → " + candidate.hex.substring(0, 8) + " (TS multi-sync OK)");
             keyGroupMap[ki] = cryptoKey;
@@ -372,7 +372,7 @@ async function startDownload(m3u8Url) {
 
       if (!foundKey) {
         console.warn("⚠️ Key#" + ki + " mismatched, skipping");
-        // DURMA, devam et - diğer key'ler eşleşebilir
+        // DO NOT STOP, continue - other keys might match
       }
     }
 
@@ -387,7 +387,7 @@ async function startDownload(m3u8Url) {
     activeTask.text = matchedCount + "/" + numGroups + " keys matched! Starting download...";
     await sleep(1000);
 
-    // Segmentleri indir ve decrypt et
+    // Download and decrypt segments
     var segments = [];
     for (var i = 0; i < playlist.length; i++) {
       activeTask.text = "Downloading: " + (i + 1) + "/" + playlist.length;
@@ -399,10 +399,10 @@ async function startDownload(m3u8Url) {
 
       if (!keyObj) {
         console.warn("⚠️ Segment#" + i + " skipping (No valid key found!)");
-        continue; // Çöp veri yazmamak için segmenti tamamen atla
+        continue; // Skip segment entirely to avoid writing garbage data
       }
 
-      // Decrypt (no-padding destekli)
+      // Decrypt (no-padding supported)
       var decBuf;
       try {
         decBuf = await crypto.subtle.decrypt({ name: "AES-CBC", iv: iv }, keyObj, segBuf);
@@ -417,7 +417,7 @@ async function startDownload(m3u8Url) {
       segments.push(decBuf);
     }
 
-    // Kaydet
+    // Save
     var blob = new Blob(segments, { type: 'video/mp2t' });
     chrome.downloads.download({
       url: URL.createObjectURL(blob),
@@ -432,34 +432,34 @@ async function startDownload(m3u8Url) {
 }
 
 // Web Crypto AES-CBC no-padding workaround
-// HLS segmentleri genelde PKCS7 padding içermez ama Web Crypto bunu zorunlu tutar.
-// Çözüm: Sentetik padding bloğu ekleyerek Web Crypto'yu kandırıyoruz.
+// HLS segments usually do not contain PKCS7 padding but Web Crypto requires it.
+// Solution: We trick Web Crypto by adding a synthetic padding block.
 async function decryptNoPadding(key, iv, ciphertext) {
   var ctArray = new Uint8Array(ciphertext);
 
-  // Son 16 byte = son ciphertext bloğu (sentetik padding'in IV'si olacak)
+  // Last 16 bytes = last ciphertext block (will be the IV of the synthetic padding)
   var lastBlock = ctArray.slice(ctArray.length - 16);
 
-  // 16 byte PKCS7 padding plaintext'i oluştur (her byte = 0x10)
+  // Create 16 byte PKCS7 padding plaintext (each byte = 0x10)
   var paddingPlain = new Uint8Array(16);
   for (var i = 0; i < 16; i++) paddingPlain[i] = 16;
 
-  // Bu padding'i encrypt et (son blok IV olarak kullanılır)
+  // Encrypt this padding (last block is used as IV)
   var encResult = await crypto.subtle.encrypt(
     { name: "AES-CBC", iv: lastBlock },
     key,
     paddingPlain
   );
 
-  // encrypt() kendi padding'ini de ekler (32 byte döner), sadece ilk 16'yı al
+  // encrypt() adds its own padding too (returns 32 bytes), take only the first 16
   var encPaddingBlock = new Uint8Array(encResult).slice(0, 16);
 
-  // Orijinal ciphertext + sentetik padding bloğu birleştir
+  // Combine original ciphertext + synthetic padding block
   var padded = new Uint8Array(ctArray.length + 16);
   padded.set(ctArray, 0);
   padded.set(encPaddingBlock, ctArray.length);
 
-  // Şimdi decrypt et - Web Crypto valid PKCS7 padding görecek
+  // Now decrypt - Web Crypto will see valid PKCS7 padding
   var result = await crypto.subtle.decrypt(
     { name: "AES-CBC", iv: iv },
     key,
@@ -469,9 +469,9 @@ async function decryptNoPadding(key, iv, ciphertext) {
   return result;
 }
 
-// ============ TS VALİDASYON & IV HELPER ============
+// ============ TS VALIDATION & IV HELPER ============
 
-// HLS spec: IV belirtilmemişse segment sequence number big-endian 128-bit integer olarak kullanılır
+// HLS spec: If IV is not specified, segment sequence number is used as big-endian 128-bit integer
 function buildSequenceIV(sequenceNumber) {
   var iv = new Uint8Array(16);
   var n = sequenceNumber;
@@ -482,21 +482,21 @@ function buildSequenceIV(sequenceNumber) {
   return iv;
 }
 
-// TS paketleri 188 byte'tır, her paket 0x47 sync byte ile başlar
-// En az 2 sync noktası doğrulanmalı (false positive'i %99.8 azaltır)
+// TS packets are 188 bytes, each packet starts with 0x47 sync byte
+// At least 2 sync points must be verified (reduces false positives by 99.8%)
 function validateTSSync(decrypted) {
   var arr = new Uint8Array(decrypted);
   if (arr.length < 188) return false;
   if (arr[0] !== 0x47) return false;
   var checkPoints = Math.min(Math.floor(arr.length / 188), 5);
-  if (checkPoints < 2) return arr[0] === 0x47; // Çok kısa segment
+  if (checkPoints < 2) return arr[0] === 0x47; // Very short segment
   for (var i = 0; i < checkPoints; i++) {
     if (arr[i * 188] !== 0x47) return false;
   }
   return true;
 }
 
-// ============ YARDIMCI ============
+// ============ HELPERS ============
 
 async function getM3U8Text(url) {
   if (url === "pasted:m3u8" && pastedM3U8Text) return pastedM3U8Text;
